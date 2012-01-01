@@ -61,8 +61,8 @@ class Chatbox
 		if ( $msgCountryID<=0 || $msgCountryID>count($Game->Variant->countries) )
 			$msgCountryID = 0;
 
-		// enforce Global tab when its not Regular press game.
-		if ( $Game->pressType != 'Regular' )
+		// Enforce Global and Notes tabs when its not Regular press game.
+		if ( $Game->pressType != 'Regular' && !(isset($Member) && $Member->countryID == $msgCountryID) )
 			$msgCountryID = 0;
 
 		$_SESSION[$Game->id.'_msgCountryID'] = $msgCountryID;
@@ -92,9 +92,10 @@ class Chatbox
 		{
 			$newmessage = trim($_REQUEST['newmessage']);
 
-			if( isset($Member)
-					&& $Game->pressType != 'NoPress'
-					&& ($Game->pressType != 'PublicPressOnly' || $msgCountryID == 0) )
+			if( isset($Member) &&
+				($Game->pressType == 'Regular' ||                                // All tabs allowed for Regular
+				 $Member->countryID == $msgCountryID ||                          // Notes tab always allowed
+				 ($Game->pressType == 'PublicPressOnly' && $msgCountryID == 0))) // Global tab allowed for public press
 			{
 				$sendingToMuted = false;
 
@@ -149,7 +150,7 @@ class Chatbox
 				$memList[]=$Game->Members->ByCountryID[$countryID]->memberNameCountry();
 			$chatbox .= '<div class="chatboxMembersList">'.implode(', ',$memList).'</div>';
 		}
-		else
+		else if ($Member->countryID != $msgCountryID)
 		{
 			$chatbox .= $Game->Members->ByCountryID[$msgCountryID]->memberBar();
 		}
@@ -174,7 +175,11 @@ class Chatbox
 
 		$chatbox .= '</TABLE></DIV>';
 
-		if ( ( isset($Member) && $Game->pressType != 'NoPress' ) || $User->type['Moderator'] )
+		if ( ($User->type['Moderator'] && $msgCountryID == 0) || 
+		     (isset($Member) &&
+			($Game->pressType == 'Regular' ||                                 // All tabs allowed for Regular
+			 $Member->countryID == $msgCountryID ||                           // Notes tab always allowed
+			 ($Game->pressType == 'PublicPressOnly' && $msgCountryID == 0)))) // Global tab allowed for public press
 		{
 			$chatbox .= '<DIV class="chatbox"><TABLE>
 					<TR class="barAlt2">
@@ -224,24 +229,25 @@ class Chatbox
 		for( $countryID=0; $countryID<=count($Game->Variant->countries); $countryID++)
 		{
 			// leave Global tab open even if its NoPress game..
-			if ($Game->pressType != 'Regular' && $countryID != 0 ) continue;
-			if ( $countryID == $Member->countryID ) continue;
-
+			if ($Game->pressType != 'Regular' && $countryID != 0 && $countryID != $Member->countryID ) continue;
+			
 			$tabs .= ' <a href="./board.php?gameID='.$Game->id.'&amp;msgCountryID='.$countryID.'&amp;rand='.rand(1,100000).'#chatboxanchor" '.
 				'class="country'.$countryID.' '.( $msgCountryID == $countryID ? 'current"'
 					: '" title="Open '.( $countryID == 0 ? 'the global' : $this->countryName($countryID)."'s" ).' chatbox tab"' ).'>';
 
-			if(isset($Game->Members->ByCountryID[$countryID]))
-				$tabs .= $Game->Members->ByCountryID[$countryID]->memberCountryName();
-			else
-				$tabs .= 'Global';
-
-			if(isset($Game->Members->ByCountryID[$countryID]))
-
-			if ( isset($Game->Members->ByCountryID[$countryID]) )
+			if ( $countryID == $Member->countryID )
 			{
+				$tabs .= 'Notes';
+			}
+			elseif(isset($Game->Members->ByCountryID[$countryID]))
+			{
+				$tabs .= $Game->Members->ByCountryID[$countryID]->memberCountryName();
 				if ( $Game->Members->ByCountryID[$countryID]->online && !$Game->Members->ByCountryID[$countryID]->isNameHidden() )
 					$tabs .= ' '.libHTML::loggedOn($Game->Members->ByCountryID[$countryID]->userID);
+			}
+			else
+			{
+				$tabs .= 'Global';
 			}
 
 			if ( $msgCountryID != $countryID and in_array($countryID, $Member->newMessagesFrom) )
